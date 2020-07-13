@@ -2,7 +2,7 @@
 import time
 import json
 import os.path
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 from pystray import Icon, Menu, MenuItem
 from collections import namedtuple
 
@@ -13,14 +13,15 @@ def create_image(is_running=False):
     size = 16
     fg = "#dfdbd2ff"
     red = "#f00"
-    image = Image.new('RGBA', (size, size), "#0000")
+    image = Image.new('RGBA', (2*size, 2*size), "#0000")
     dc = ImageDraw.Draw(image)
     if is_running:
-        bbox = [(0, 0), (size, size)]
+        bbox = [(2, 2), (2*size-4, 2*size-4)]
         dc.ellipse(bbox, fill=red)
     else:
-        triangle = [(size // 4, 0), (size // 4, size), (3 * size // 4, size // 2)]
+        triangle = [(size // 2, 0), (size // 2, 2*size), (3 * size // 2, size)]
         dc.polygon(triangle, fill=fg)
+    image = image.resize((size, size))
     return image
 
 Task = namedtuple("Task", "name project issue_id", defaults=[None, None])
