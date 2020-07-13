@@ -38,10 +38,11 @@ class App:
         if self.started:
             title = MenuItem("Zastavit", self.stop, default=True)
         else:
-        tasks = [MenuItem(task.name, pass_func) for task in self.repo.recent_tasks()]
             title = MenuItem(f"Začít {self.task.name}", lambda: self.start(self.task), default=True)
+        tasks = [MenuItem(task.name, pass_func) for task in self.recent_tasks()]
+        recent = MenuItem("Nedávné...", Menu(*tasks))
         new = MenuItem("Začít úkol...", pass_func)
-        return [title, Menu.SEPARATOR, *tasks, Menu.SEPARATOR, new]
+        return [title, Menu.SEPARATOR, recent, Menu.SEPARATOR, new]
     
     def __init__(self):
         self.icon = Icon("timer", create_image(), title="3:26", menu=Menu(self.create_menu))
