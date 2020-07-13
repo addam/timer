@@ -26,52 +26,54 @@ def create_image(is_running=False):
 Task = namedtuple("Task", "name project issue_id", defaults=[None, None])
 Log = namedtuple("Log", "task start end description", defaults=[None, None])
 
-class Controller:
-    def create_menu(self):
-        if self.state.started:
-            title = MenuItem("Zastavit", self.state.stop, default=True)
-        else:
-            title = MenuItem(f"Začít {self.state.task.name}", lambda: self.state.start(self.state.task), default=True)
-        tasks = [MenuItem(task.name, pass_func) for task in self.repo.recent_tasks()]
-        new = MenuItem("Začít úkol...", pass_func)
-        return [title, Menu.SEPARATOR, *tasks, Menu.SEPARATOR, new]
-    
-    def __init__(self):
-        self.repo = Repository()
-        self.state = State(self.repo)
-        self.icon = Icon("timer", create_image(), title="3:26", menu=Menu(self.create_menu))
-    
-    def run(self):
-        self.icon.run()
-
-class State:
-    def __init__(self, repo):
-        self.repo = repo
-        self.task = Task("default task")
-        self.started = None
-    
-    def start(self, task):
-        self.task = task
-        self.started = time.time()
-    
-    def stop(self):
-        self.log = Log(self.task, self.started, time.time())
-        self.repo.append(self.log)
-        self.started = None
-    
-class Repository:
+class App:
     dirname = os.path.expanduser("~/.config/timer")
     log_filename = f"{dirname}/log.json"
     task_filename = f"{dirname}/task.json"
     
+    ## Presentation ##
+    
+    def create_menu(self):
+        if self.started:
+            title = MenuItem("Zastavit", self.stop, default=True)
+        else:
+        tasks = [MenuItem(task.name, pass_func) for task in self.repo.recent_tasks()]
+            title = MenuItem(f"Začít {self.task.name}", lambda: self.start(self.task), default=True)
+        new = MenuItem("Začít úkol...", pass_func)
+        return [title, Menu.SEPARATOR, *tasks, Menu.SEPARATOR, new]
+    
     def __init__(self):
+        self.icon = Icon("timer", create_image(), title="3:26", menu=Menu(self.create_menu))
+        self.task = Task("default task")
+        self.started = None
+        self.tasks = self.load_tasks()
+    
+    def run(self):
+        self.icon.run()
+
+    ## State ##
+    
+    def start(self, task):
+        self.task = task
+        self.started = time.time()
+        self.icon.icon = create_image(True)
+    
+    def stop(self):
+        log = Log(self.task, self.started, time.time())
+        self.append_log(log)
+        self.started = None
+        self.icon.icon = create_image(False)
+    
+    ## Repository ##
+    
+    def load_tasks(self):
         os.makedirs(self.dirname, exist_ok=True)
         try:
-            self.tasks = [Task(*values) for values in json.load(open(self.task_filename))]
+            return [Task(*values) for values in json.load(open(self.task_filename))]
         except (IOError, ValueError):
-            self.tasks = list()
+            return list()
     
-    def append(self, log):
+    def append_log(self, log):
         task_id = self.task_id(log.task)
         try:
             storage = json.load(open(self.log_filename))
@@ -92,4 +94,4 @@ class Repository:
         return self.tasks
 
 if __name__ == "__main__":
-    Controller().run()
+    App().run()
