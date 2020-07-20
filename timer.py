@@ -27,8 +27,8 @@ def create_image(is_running=False):
 def duration(seconds):
     minutes, seconds = divmod(int(seconds), 60)
     hours, minutes = divmod(minutes, 60)
-    if not hours:
-        return f"{minutes:02}:{seconds:02}"
+    # if not hours:
+        # return f"{minutes:02}:{seconds:02}"
     days, hours = divmod(hours, 24)
     if not days:
         return f"{hours:02}:{minutes:02}:{seconds:02}"
