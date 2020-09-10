@@ -27,10 +27,14 @@ for log in storage:
     stats[log.task].append(log)
 
 for task_id, logs in stats.items():
-    print(tasks[task_id], duration(sum(log.end - log.start for log in logs)))
+    try:
+        print(tasks[task_id], duration(sum(log.end - log.start for log in logs)))
+    except IndexError:
+        print(f"task {task_id} not in list")
     group_by_day = listdict((format_day(log.start), log) for log in logs)
     for day, day_logs in group_by_day.items():
         print("\t", day, duration(sum(log.end - log.start for log in day_logs)))
         for log in day_logs:
             start = time.localtime(log.start)
             print("\t\t", time.strftime("%H:%M", start), "+", duration(log.end - log.start), log.description)
+    

@@ -5,6 +5,9 @@ import os.path
 from PIL import Image, ImageDraw, ImageFilter
 from pystray import Icon, Menu, MenuItem
 from collections import namedtuple
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk
 
 def pass_func():
     pass
@@ -53,8 +56,24 @@ class App:
             title = MenuItem(f"Začít {self.task.name}", self.starter(self.task), default=True)
         tasks = [MenuItem(task.name, self.starter(task)) for task in self.recent_tasks()]
         recent = MenuItem("Nedávné...", Menu(*tasks))
-        new = MenuItem("Začít úkol...", pass_func)
+        new = MenuItem("Začít úkol...", self.run_new_task_dialog)
         return [title, Menu.SEPARATOR, recent, Menu.SEPARATOR, new]
+    
+    def run_new_task_dialog(self, icon):
+        dialog = Gtk.Dialog(parent=None, flags=0)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        dialog.set_title("Začít úkol...")
+        box = dialog.get_content_area()
+        name_entry, project_entry, issue_id_entry = entries = [Gtk.Entry() for i in range(3)]
+        for entry, title in zip(entries, ["Úkol", "Projekt", "Issue ID"]):
+            box.add(Gtk.Label(label=title))
+            box.add(entry)
+        dialog.show_all()
+        response = dialog.run()
+        task = Task(name_entry.get_text(), project_entry.get_text(), issue_id_entry.get_text())
+        dialog.destroy()
+        if response == Gtk.ResponseType.OK:
+            self.start(task)
     
     def __init__(self):
         self.icon = Icon("timer", create_image(), title="3:26", menu=Menu(self.create_menu))
