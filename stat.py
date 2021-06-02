@@ -26,7 +26,10 @@ stats = defaultdict(list)
 for log in storage:
     stats[log.task].append(log)
 
-for task_id, logs in stats.items():
+def thread_latest(logs):
+    return max(log.end for log in logs)
+
+for task_id, logs in sorted(stats.items(), key=lambda pair: thread_latest(pair[1])):
     try:
         print(tasks[task_id], duration(sum(log.end - log.start for log in logs)))
     except IndexError:
