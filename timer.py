@@ -7,7 +7,7 @@ from pystray import Icon, Menu, MenuItem
 from collections import namedtuple
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+from gi.repository import Gtk, GLib
 
 def pass_func():
     pass
@@ -50,14 +50,28 @@ class App:
     
     def create_menu(self):
         if self.started:
-            elapsed = time.time() - self.started
-            title = MenuItem(f"Zastavit ({duration(elapsed)})", self.stop, default=True)
+            title = MenuItem(f"Zastavit {self.task.name}", self.stop, default=True)
         else:
             title = MenuItem(f"Začít {self.task.name}", self.starter(self.task), default=True)
         tasks = [MenuItem(task.name, self.starter(task)) for task in self.recent_tasks()]
         recent = MenuItem("Nedávné...", Menu(*tasks))
         new = MenuItem("Začít úkol...", self.run_new_task_dialog)
         return [title, Menu.SEPARATOR, recent, Menu.SEPARATOR, new]
+    
+    def set_click_callback(self):
+        def update_label(menu):
+            if not self.started:
+                return
+            elapsed = time.time() - self.started
+            label = f"Zastavit {self.task.name} ({duration(elapsed)})"
+            # get the first menu item
+            item = next(iter(menu))
+            GLib.idle_add(item.set_label, label)
+        
+        def postponed():
+            self.icon._menu_handle.connect('show', update_label)
+        
+        GLib.idle_add(postponed)
     
     def run_new_task_dialog(self, icon):
         dialog = Gtk.Dialog(parent=None, flags=0)
@@ -76,7 +90,13 @@ class App:
             self.start(task)
     
     def __init__(self):
-        self.icon = Icon("timer", create_image(), title="3:26", menu=Menu(self.create_menu))
+        self.icon = Icon("timer", create_image(), title="25:17", menu=Menu(self.create_menu))
+        orig_fn = self.icon._create_menu
+        def impostor(*args, **kwargs):
+            result = orig_fn(*args, **kwargs)
+            self.set_click_callback()
+            return result
+        self.icon._create_menu = impostor
         self.task = Task("default task")
         self.started = None
         self.tasks = self.load_tasks()
@@ -95,6 +115,7 @@ class App:
         self.task = task
         self.started = time.time()
         self.icon.icon = create_image(True)
+        self.set_click_callback()
         print("started", self.task)
     
     def stop(self):
