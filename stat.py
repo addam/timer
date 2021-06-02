@@ -40,4 +40,4 @@ for task_id, logs in sorted(stats.items(), key=lambda pair: thread_latest(pair[1
         for log in day_logs:
             start = time.localtime(log.start)
             print("\t\t", time.strftime("%H:%M", start), "+", duration(log.end - log.start), log.description)
-    
+
