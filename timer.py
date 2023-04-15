@@ -129,7 +129,8 @@ class App:
     def load_tasks(self):
         os.makedirs(self.dirname, exist_ok=True)
         try:
-            return [Task(*val) for val in csv.reader(open(self.task_filename))]
+            result = [Task(*val) for val in csv.reader(open(self.task_filename))]
+            return list(reversed(result))
         except (IOError, ValueError):
             return list()
 
