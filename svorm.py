@@ -22,6 +22,10 @@ class Svorm:
     filename = f"{self.dirname}/{cls.__name__.lower()}.csv"
     return Table(cls, filename, self)
 
+  def create(self, item):
+    tp = type(item)
+    return self(tp).create(item)
+
   def delete(self, delete_items, cascade=[]):
     """Safely delete several items from arbitrary tables, with cascading."""
     resolved_ids = defaultdict(set)
@@ -82,6 +86,9 @@ class VirtualTable:
           func = getattr(operator, op)
           result = [x for x in result if func(getattr(x, name), value)]
     return result
+
+  def __iter__(self):
+    return iter(self.read())
 
 
 class Table(VirtualTable):

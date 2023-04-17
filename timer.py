@@ -1,16 +1,15 @@
 #!/usr/bin/python3
-import time
-import csv
-import os.path
-from PIL import Image, ImageDraw, ImageFilter
-from pystray import Icon, Menu, MenuItem
 from collections import namedtuple
+import csv
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib
+import os.path
+from PIL import Image, ImageDraw, ImageFilter
+from pystray import Icon, Menu, MenuItem
+from repo import db, Log, Task
+import time
 
-def pass_func():
-    pass
 
 def create_image(is_running=False):
     size = 16
@@ -27,33 +26,66 @@ def create_image(is_running=False):
     image = image.resize((size, size))
     return image
 
-def duration(seconds):
+def pretty_duration(seconds):
     minutes, seconds = divmod(int(seconds), 60)
     hours, minutes = divmod(minutes, 60)
-    # if not hours:
-        # return f"{minutes:02}:{seconds:02}"
     days, hours = divmod(hours, 24)
     if not days:
         return f"{hours:02}:{minutes:02}:{seconds:02}"
     else:
         return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
 
-Task = namedtuple("Task", "name project issue_id", defaults=[None, None])
-Log = namedtuple("Log", "task start end description", defaults=[None, None])
 
 class App:
-    dirname = os.path.expanduser("~/.config/timer")
-    log_filename = f"{dirname}/log.csv"
-    task_filename = f"{dirname}/task.csv"
+    def __init__(self):
+        # State
+        self.started = None
+        self.task = next(iter(self.recent_tasks()), Task("default task"))
+        # Presentation
+        self.icon = Icon("timer", create_image(), title="dummy title", menu=Menu(self.create_menu))
+        orig_fn = self.icon._create_menu
+        def impostor(*args, **kwargs):
+            result = orig_fn(*args, **kwargs)
+            self.set_click_callback()
+            return result
+        self.icon._create_menu = impostor
 
-    ## Presentation ##
+    ## State
+
+    def start(self, task):
+        self.task = task
+        self.started = time.time()
+        self.icon.icon = create_image(True)
+        print("started", self.started, self.task)
+        self.set_click_callback()
+
+    def stop(self):
+        log = Log(self.task, self.started, time.time())
+        log = db.create(log)
+        print("logged", log)
+        self.started = None
+        self.icon.icon = create_image(False)
+
+    def recent_tasks(self):
+        tasks = db(Log).group_by('task', end='max(end)').read(order=('end', 'desc'), limit=20)
+        return [x.task for x in tasks]
+
+    def elapsed(self):
+        return time.time() - self.started
+    
+    ## Presentation
 
     def create_menu(self):
+        def starter(task):
+            def func(icon):
+                self.start(task)
+            return func
+
         if self.started:
             title = MenuItem(f"Zastavit {self.task.name}", self.stop, default=True)
         else:
-            title = MenuItem(f"Začít {self.task.name}", self.starter(self.task), default=True)
-        tasks = [MenuItem(task.name, self.starter(task)) for task in self.recent_tasks()]
+            title = MenuItem(f"Začít {self.task.name}", starter(self.task), default=True)
+        tasks = [MenuItem(task.name, starter(task)) for task in self.recent_tasks()]
         recent = MenuItem("Nedávné...", Menu(*tasks))
         new = MenuItem("Začít úkol...", self.run_new_task_dialog)
         return [title, Menu.SEPARATOR, recent, Menu.SEPARATOR, new]
@@ -62,8 +94,7 @@ class App:
         def update_label(menu):
             if not self.started:
                 return
-            elapsed = time.time() - self.started
-            label = f"Zastavit {self.task.name} ({duration(elapsed)})"
+            label = f"Zastavit {self.task.name} ({pretty_duration(self.elapsed())})"
             # get the first menu item
             item = next(iter(menu))
             GLib.idle_add(item.set_label, label)
@@ -89,66 +120,9 @@ class App:
         if response == Gtk.ResponseType.OK:
             self.start(task)
 
-    def __init__(self):
-        self.icon = Icon("timer", create_image(), title="25:17", menu=Menu(self.create_menu))
-        orig_fn = self.icon._create_menu
-        def impostor(*args, **kwargs):
-            result = orig_fn(*args, **kwargs)
-            self.set_click_callback()
-            return result
-        self.icon._create_menu = impostor
-        self.task = Task("default task")
-        self.started = None
-        self.tasks = self.load_tasks()
-
-    def starter(self, task):
-        def func(icon):
-            self.start(task)
-        return func
-
     def run(self):
         self.icon.run()
 
-    ## State ##
-
-    def start(self, task):
-        self.task = task
-        self.started = time.time()
-        self.icon.icon = create_image(True)
-        self.set_click_callback()
-        print("started", self.task)
-
-    def stop(self):
-        log = Log(self.task, self.started, time.time())
-        self.append_log(log)
-        self.started = None
-        self.icon.icon = create_image(False)
-
-    ## Repository ##
-
-    def load_tasks(self):
-        os.makedirs(self.dirname, exist_ok=True)
-        try:
-            result = [Task(*val) for val in csv.reader(open(self.task_filename))]
-            return list(reversed(result))
-        except (IOError, ValueError):
-            return list()
-
-    def append_log(self, log):
-        task_id = self.task_id(log.task)
-        log = log._replace(task=task_id)
-        with open(self.log_filename, "a+") as f:
-            csv.writer(f).writerow(log)
-
-    def task_id(self, task):
-        if task not in self.tasks:
-            self.tasks.append(task)
-            with open(self.task_filename, "w+") as f:
-                csv.writer(f).writerows(self.tasks)
-        return self.tasks.index(task)
-
-    def recent_tasks(self):
-        return self.tasks
 
 if __name__ == "__main__":
     App().run()

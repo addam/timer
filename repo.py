@@ -4,13 +4,14 @@ from svorm import Svorm
 import time
 
 dirname = os.path.expanduser("~/.config/timer")
+db = Svorm(dirname)
 
 
 @dataclass(unsafe_hash=True)
 class Task:
   name: str
-  project: str
-  issue_id: str
+  project: str = ""
+  issue_id: str = ""
 
 
 @dataclass
@@ -18,11 +19,10 @@ class Log:
   task: Task
   start: float
   end: float
-  description: str
+  description: str = ""
 
 
 def test():
-  db = Svorm(dirname)
   logs = db(Log)
   print(logs.group_by('task', end='max(end)').read(limit=20, order=('end', 'desc')))
   start = time.time() - 24 * 3600
