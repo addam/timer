@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import csv
 from functools import cache
 import operator
@@ -35,38 +35,26 @@ class Svorm:
     print("will delete", resolved_ids)
     for tp, ids in resolved_ids.items():
       table = self(tp)
-      table.delete_ids(ids)
+      table._delete_ids(ids)
       for tp2, missing_ids in resolved_ids.items():
         for name in table.fields_of_type(tp2):
-          table.shift_ids(name, missing_ids)
+          table._shift_ids(name, missing_ids)
 
 
 def refreshing(source):
   def call(self, *args, **kwargs):
-    tm = os.path.getmtime(self.filename)
-    if tm > self.last_refreshed:
-      self.last_refreshed = tm
-      self.refresh()
+    if hasattr(self, "last_refreshed"):
+      tm = os.path.getmtime(self.filename)
+      if tm > self.last_refreshed:
+        self.last_refreshed = tm
+        self._refresh()
     return source(self, *args, **kwargs)
   return call
 
 
-class Table:
-  def __init__(self, cls, filename, db):
-    self.cls, self.filename, self.db = cls, filename, db
-    self.rows = None
-    self.last_refreshed = 0
-
-  def raw_reader(self):
-    reader = csv.reader(open(self.filename))
-    return filter(None, reader)
-
-  def refresh(self):
-    fields = self.db.field_constructors(self.cls)
-    self.rows = [self.cls(*[tp(value) for value, (name, tp) in zip(line, fields)]) for line in self.raw_reader()]
-
-  def fields_of_type(self, item_cls):
-    return [name for name, tp in self.cls.__annotations__.items() if tp == item_cls]
+class VirtualTable:
+  def __init__(self, cls, rows):
+    self.cls, self.rows = cls, rows
 
   @refreshing
   def get_id(self, item):
@@ -95,6 +83,24 @@ class Table:
           result = [x for x in result if func(getattr(x, name), value)]
     return result
 
+
+class Table(VirtualTable):
+  def __init__(self, cls, filename, db):
+    self.cls, self.filename, self.db = cls, filename, db
+    self.rows = None
+    self.last_refreshed = 0
+
+  def raw_reader(self):
+    reader = csv.reader(open(self.filename))
+    return filter(None, reader)
+
+  def _refresh(self):
+    fields = self.db.field_constructors(self.cls)
+    self.rows = [self.cls(*[tp(value) for value, (name, tp) in zip(line, fields)]) for line in self.raw_reader()]
+
+  def fields_of_type(self, item_cls):
+    return [name for name, tp in self.cls.__annotations__.items() if tp == item_cls]
+
   def create(self, item):
     typed_values = [(tp, getattr(item, name)) for name, tp in self.cls.__annotations__.items()]
     data = [self.db(tp).get_id(value) if is_dataclass(tp) else value for tp, value in typed_values]
@@ -102,14 +108,14 @@ class Table:
       csv.writer(f).writerow(data)
     return item
 
-  def delete_ids(self, ids):
+  def _delete_ids(self, ids):
     """Deletes some items by their row ids, without cascading. Will break all linked foreign keys."""
     reader = self.raw_reader()
     data = [line for i, line in enumerate(reader) if i not in ids]
     with open(self.filename, "w+") as f:
       csv.writer(f).writerows(data)
 
-  def shift_ids(self, name, ids):
+  def _shift_ids(self, name, ids):
     """Update a foreign key after some foreign ids have been deleted"""
     def shift(value):
       i = int(value)
@@ -121,6 +127,21 @@ class Table:
     data = [[shift(v) if n == name else v for n, v in zip(names, line)] for line in reader]
     with open(self.filename, "w+") as f:
       csv.writer(f).writerows(data)
+
+  def group_by(self, name, **kwargs):
+    aggregators = {fn.__name__: fn for fn in [min, max, sum]}
+    fields = (name, *kwargs)
+    cls = namedtuple(f"{self.cls.__name__}Group", fields)
+    expressions = [expr.split("(", 1) for expr in kwargs.values()]
+    field_constructors = [(aggregators[fn], col.rstrip(")")) for fn, col in expressions]
+    groups = defaultdict(list)
+    for item in self.read():
+      groups[getattr(item, name)].append(item)
+    data = list()
+    for key, items in groups.items():
+      values = [fn(getattr(x, col) for x in items) for fn, col in field_constructors]
+      data.append(cls(key, *values))
+    return VirtualTable(cls, data)
 
 
 def test():
