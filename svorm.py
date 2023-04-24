@@ -29,7 +29,8 @@ class Svorm:
   def delete(self, delete_items, cascade=[]):
     """Safely delete several items from arbitrary tables, with cascading."""
     resolved_ids = defaultdict(set)
-    cascade_tables = [self(tp) for tp in cascade]
+    cascade_tables = [self(tp) for tp in {type(it) for it in delete_items} | set(cascade)]
+    delete_items = list(delete_items)
     while delete_items:
       item = delete_items.pop()
       for table in cascade_tables:
@@ -39,9 +40,10 @@ class Svorm:
     for tp, ids in resolved_ids.items():
       table = self(tp)
       table._delete_ids(ids)
-      for tp2, missing_ids in resolved_ids.items():
-        for name in table.fields_of_type(tp2):
-          table._shift_ids(name, missing_ids)
+      # delete these missing ids from all cascaded tables
+      for linked_table in cascade_tables:
+        for name in linked_table.fields_of_type(tp):
+          linked_table._shift_ids(name, ids)
 
 
 def refreshing(source):
@@ -142,6 +144,9 @@ class Table(VirtualTable):
       csv.writer(f).writerows(data)
 
   def group_by(self, name, **kwargs):
+    """Create a VirtualTable from aggregated rows
+    name: column to be used for grouping
+    **kwargs: name=expression pairs to be generated"""
     aggregators = {fn.__name__: fn for fn in [min, max, sum]}
     fields = (name, *kwargs)
     cls = namedtuple(f"{self.cls.__name__}Group", fields)
