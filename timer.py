@@ -56,13 +56,11 @@ class App:
         self.task = task
         self.started = time.time()
         self.icon.icon = create_image(True)
-        print("started", self.started, self.task)
         self.set_click_callback()
 
     def stop(self):
         log = Log(self.task, self.started, time.time())
         log = db.create(log)
-        print("logged", log)
         self.started = None
         self.icon.icon = create_image(False)
 
@@ -72,7 +70,7 @@ class App:
 
     def elapsed(self):
         return time.time() - self.started
-    
+
     ## Presentation
 
     def create_menu(self):
@@ -125,4 +123,39 @@ class App:
 
 
 if __name__ == "__main__":
-    App().run()
+    from sys import argv
+    match argv[1:]:
+        case ["--task", name]:
+            for task in db(Task).read(name_eq=name):
+                print(task)
+                for log in db(Log).read(task_eq=task):
+                    print(" ", log)
+        case ["--project"]:
+            for row in db(Task).group_by('project'):
+                print(row.project)
+        case ["--project", name]:
+            for task in db(Task).read(project_eq=name):
+                print(task)
+                for log in db(Log).read(task_eq=task):
+                    print(" ", log)
+        case ["--delete-task", name]:
+            victims = db(Task).read(name_eq=name)
+            db.delete(victims, [Log])
+            print("deleted", victims)
+        case ["--delete-project", name]:
+            victims = db(Task).read(project_eq=name)
+            db.delete(victims, [Log])
+            print("deleted", victims)
+        case ["--last"]:
+            victims = db(Log).read(order=('end', 'desc'), limit=1)
+            print(*victims)
+        case ["--delete-last"]:
+            victims = db(Log).read(order=('end', 'desc'), limit=1)
+            db.delete(victims, [Log])
+            print("deleted", victims)
+        case []:
+            print("run", argv)
+            App().run()
+        case _:
+            print("usage: ./timer.py --task <name> | --project <name> | --delete-task <name> | --delete-project <name> | -h")
+        
