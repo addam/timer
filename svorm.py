@@ -24,7 +24,7 @@ class Svorm:
 
   def create(self, item):
     tp = type(item)
-    return self(tp).create(item)
+    return self(tp).create(item, recurse=True)
 
   def delete(self, delete_items, cascade=[]):
     """Safely delete several items from arbitrary tables, with cascading."""
@@ -36,7 +36,6 @@ class Svorm:
         delete_items.extend(table.read(any=item))
       tp = type(item)
       resolved_ids[tp].add(self(tp).get_id(item))
-    print("will delete", resolved_ids)
     for tp, ids in resolved_ids.items():
       table = self(tp)
       table._delete_ids(ids)
@@ -108,9 +107,16 @@ class Table(VirtualTable):
   def fields_of_type(self, item_cls):
     return [name for name, tp in self.cls.__annotations__.items() if tp == item_cls]
 
-  def create(self, item):
+  @refreshing
+  def get_id(self, item, allow_create=False):
+    if allow_create and item not in self.rows:
+      self.create(item, recurse=True)
+      self._refresh()
+    return self.rows.index(item)
+
+  def create(self, item, recurse=False):
     typed_values = [(tp, getattr(item, name)) for name, tp in self.cls.__annotations__.items()]
-    data = [self.db(tp).get_id(value) if is_dataclass(tp) else value for tp, value in typed_values]
+    data = [self.db(tp).get_id(value, allow_create=recurse) if is_dataclass(tp) else value for tp, value in typed_values]
     with open(self.filename, "a+") as f:
       csv.writer(f).writerow(data)
     return item
