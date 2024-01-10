@@ -44,9 +44,13 @@ if __name__ == "__main__":
         main()
     elif argv[1] == "-h" or argv[1] == "--help":
         print("USAGE: stat.py [period [project]]")
-        print("  period may be: 'day', 'week', 'month', 'year'")
+        print("  period may be: 'day', 'week', 'month', 'year' or a starting date like '2018-01-01'")
     else:
         day = 24*3600
-        period = {"day": day, "week": 7*day, "month": 31*day, "year": 366*day}[argv[1]]
+        period = {"day": day, "week": 7*day, "month": 31*day, "year": 366*day}.get(argv[1])
+        if period is None:
+            start = time.mktime(time.strptime(argv[1], "%Y-%m-%d"))
+        else:
+            start = time.time() - period
         project = argv[2] if len(argv) > 2 else None
-        main(time.time() - period, project)
+        main(start, project)
