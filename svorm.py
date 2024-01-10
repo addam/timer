@@ -77,9 +77,10 @@ class VirtualTable:
         case ["limit"]:
           result = result[:value]
         case ["order"]:
-          name = value[0]
-          reverse = len(value) > 1 and value[1] == "desc"
-          result = sorted(result, key=lambda x: getattr(x, name), reverse=reverse)
+          for i in reversed(range(0, len(value), 2)):            
+            name = value[i]
+            reverse = len(value) > i and value[i + 1] == "desc"
+            result = sorted(result, key=lambda x: getattr(x, name), reverse=reverse)
         case ["any"]:
           fields = self.fields_of_type(type(value))
           result = [x for x in result if any(getattr(x, name) == value for name in fields)]

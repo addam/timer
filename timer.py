@@ -83,6 +83,8 @@ class App:
         else:
             title = MenuItem(f"Začít {self.task.name}", starter(self.task), default=True)
         tasks = [MenuItem(task.name, starter(task)) for task in self.recent_tasks()]
+        tasks.append(Menu.SEPARATOR)
+        tasks.append(MenuItem("Všechny úkoly...", self.pick_task_dialog))
         recent = MenuItem("Nedávné...", Menu(*tasks))
         note = MenuItem("Napsat poznámku...", self.add_note_dialog, enabled=self.started)
         new = MenuItem("Začít úkol...", self.run_new_task_dialog)
@@ -118,6 +120,30 @@ class App:
         if response == Gtk.ResponseType.OK:
             self.start(task)
 
+    def pick_task_dialog(self, icon):
+        dialog = Gtk.Dialog(parent=None, flags=0)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        dialog.set_title("Všechny úkoly")
+        box = dialog.get_content_area()
+        listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+        row_ids = list()
+        for task in db(Task).read(order=('project', 'asc', 'name', 'asc')):
+            total = sum(log.end - log.start for log in db(Log).read(task_eq=task))
+            latest = db(Log).read(task_eq=task, order=('end', 'desc'), limit=1)
+            latest_time = time.strftime('%Y-%m-%d', time.localtime(latest[0].end)) if latest else "nikdy"
+            listbox.add(Gtk.Label(label=f"{task.name} ({task.project} {task.issue_id}), celkem: {pretty_duration(total)}, naposledy: {latest_time}"))
+            row_ids.append(task)
+        scrollbar = Gtk.ScrolledWindow(width_request=600, height_request=600)
+        scrollbar.add(listbox)
+        box.add(scrollbar)
+        dialog.show_all()
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            row = listbox.get_selected_row()
+            if row:
+                self.start(row_ids[row.get_index()])
+        dialog.destroy()
+
     def add_note_dialog(self, icon):
         dialog = Gtk.Dialog(parent=None, flags=0)
         dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
@@ -134,7 +160,6 @@ class App:
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
             self.description = entry.get_text()
-            print("description", self.description)
         dialog.destroy()
 
     def run(self):
