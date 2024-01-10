@@ -1,11 +1,8 @@
 #!/usr/bin/python3
-from collections import namedtuple
-import csv
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib
-import os.path
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 from pystray import Icon, Menu, MenuItem
 from repo import db, Log, Task
 import time
@@ -55,13 +52,15 @@ class App:
     def start(self, task):
         self.task = task
         self.started = time.time()
+        self.description = None
         self.icon.icon = create_image(True)
         self.set_click_callback()
 
     def stop(self):
-        log = Log(self.task, self.started, time.time())
+        log = Log(self.task, round(self.started, 2), round(time.time(), 2), self.description)
         log = db.create(log)
         self.started = None
+        self.description = None
         self.icon.icon = create_image(False)
 
     def recent_tasks(self):
@@ -85,8 +84,9 @@ class App:
             title = MenuItem(f"Začít {self.task.name}", starter(self.task), default=True)
         tasks = [MenuItem(task.name, starter(task)) for task in self.recent_tasks()]
         recent = MenuItem("Nedávné...", Menu(*tasks))
+        note = MenuItem("Napsat poznámku...", self.add_note_dialog, enabled=self.started)
         new = MenuItem("Začít úkol...", self.run_new_task_dialog)
-        return [title, Menu.SEPARATOR, recent, Menu.SEPARATOR, new]
+        return [title, Menu.SEPARATOR, recent, Menu.SEPARATOR, note, new]
 
     def set_click_callback(self):
         def update_label(menu):
@@ -117,6 +117,25 @@ class App:
         dialog.destroy()
         if response == Gtk.ResponseType.OK:
             self.start(task)
+
+    def add_note_dialog(self, icon):
+        dialog = Gtk.Dialog(parent=None, flags=0)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        dialog.set_title("Poznámka")
+        box = dialog.get_content_area()
+        box.add(Gtk.Label(label=f"Aktuální úkol: {self.task.name}"))
+        entry = Gtk.Entry(width_chars=80)
+        if self.description:
+            entry.set_text(self.description)
+        else:
+            entry.set_text(f"{time.strftime('%H:%M')} ")
+        box.add(entry)
+        dialog.show_all()
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            self.description = entry.get_text()
+            print("description", self.description)
+        dialog.destroy()
 
     def run(self):
         self.icon.run()
